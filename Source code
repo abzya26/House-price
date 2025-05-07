@@ -1,45 +1,56 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import KFold, cross_val_score
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error
-from sklearn.linear_model import RidgeCV
-from sklearn.ensemble import StackingRegressor
-import xgboost as xgb
-import lightgbm as lgb
+from sklearn.preprocessing import StandardScaler
+from xgboost import XGBRegressor
+import warnings
+
+warnings.filterwarnings("ignore")
 
 # Load your dataset
-df = pd.read_csv("house_data.csv")  # Replace with your file
-X = df.drop("SalePrice", axis=1)
-y = df["SalePrice"]
+# Example: Use a CSV file like the Kaggle House Prices dataset
+data = pd.read_csv('house_prices.csv')
 
-# Preprocess data (fill missing values, encoding)
-X = X.select_dtypes(include=[np.number]).fillna(0)  # Simplified
-# You can add more sophisticated imputation or preprocessing
+# Basic preprocessing
+data = data.dropna(axis=1, thresh=0.8*len(data))  # Drop columns with >20% missing
+data = data.fillna(data.median(numeric_only=True))  # Fill missing with median
 
-# Define base models
-ridge = RidgeCV(alphas=np.logspace(-3, 3, 13))
-xgb_model = xgb.XGBRegressor(n_estimators=100, learning_rate=0.05, max_depth=3)
-lgb_model = lgb.LGBMRegressor(n_estimators=100, learning_rate=0.05)
+# Convert categorical variables using one-hot encoding
+data = pd.get_dummies(data, drop_first=True)
 
-# Stacking ensemble
-stack = StackingRegressor(
-    estimators=[
-        ('ridge', ridge),
-        ('xgb', xgb_model),
-        ('lgb', lgb_model)
-        ],
-    final_estimator=RidgeCV()
-)
+# Separate features and target
+X = data.drop('SalePrice', axis=1)
+y = data['SalePrice']
 
-# Cross-validation
-kf = KFold(n_splits=5, shuffle=True, random_state=42)
-scores = cross_val_score(stack, X, y, cv=kf, scoring='neg_root_mean_squared_error')
-print(f"Average RMSE: {-np.mean(scores):.2f}")
+# Feature scaling
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-# Train final model
-stack.fit(X, y)
+# Split into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-# Prediction (example)
-X_test = pd.read_csv("house_test.csv")  # if you have test data
-X_test = X_test.select_dtypes(include=[np.number]).fillna(0)
-predictions = stack.predict(X_test)
+# Initialize smart regression model - XGBoost
+xgb = XGBRegressor(objective='reg:squarederror', random_state=42)
+
+# Grid search for hyperparameter tuning (basic example)
+param_grid = {
+    'n_estimators': [100, 200],
+    'max_depth': [3, 5],
+    'learning_rate': [0.05, 0.1],
+    'subsample': [0.8, 1.0]
+}
+
+grid_search = GridSearchCV(estimator=xgb, param_grid=param_grid, cv=3, scoring='neg_root_mean_squared_error', n_jobs=-1)
+grid_search.fit(X_train, y_train)
+
+# Best model
+best_model = grid_search.best_estimator_
+
+# Predictions
+y_pred = best_model.predict(X_test)
+
+# Evaluation
+rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+print(f"Root Mean Squared Error: {rmse:.2f}")
+
