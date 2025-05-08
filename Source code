@@ -10,7 +10,7 @@ warnings.filterwarnings("ignore")
 
 # Load your dataset
 # Example: Use a CSV file like the Kaggle House Prices dataset
-data = pd.read_csv('house_prices.csv')
+data = pd.read_csv('dataset.csv')
 
 # Basic preprocessing
 data = data.dropna(axis=1, thresh=0.8*len(data))  # Drop columns with >20% missing
